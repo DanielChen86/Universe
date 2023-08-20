@@ -3,4 +3,4 @@ phi_dot: 2
 density_DR: 30
 a: 0.0001
 t: 0
-t_phi: -0.2
+G_field: 1

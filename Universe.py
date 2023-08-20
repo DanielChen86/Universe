@@ -1,5 +1,6 @@
 import numpy as np
 import yaml
+from scipy.special import zeta
 
 
 class Parameter:
@@ -20,6 +21,9 @@ class Universe(Parameter, InitialValue):
         InitialValue.__init__(self, ivalue)
         self.a = self.ivalue['a']
         self.phi = Phi(parameter, ivalue)
+        self.phi.update_temperature()
+        self.G = GaugeField(parameter, ivalue, self.phi.T)
+        self.G.update_Upsilon(self.phi.get_Upsilon())
 
         self.recorder = {'t': [], 'a': [], 'a_dot': [], 'H': []}
         self.t = self.ivalue['t']
@@ -31,21 +35,19 @@ class Universe(Parameter, InitialValue):
             self.t += dt
 
             if not self.phi_start:
-                
+
                 self.phi_start = True
 
-            total_density = self.phi.density_vacuum() + self.phi.density_dark_radiation()
-            # total_pressure = self.phi.pressure_vacuum() + self.phi.pressure_dark_radiation()
-            
-            
+            total_density = self.phi.density_vacuum(
+            ) + self.phi.density_dark_radiation() + self.G.density
+
             pi_rho = (8 * np.pi * self.parameter['G'] / 3) * total_density
             pi_rho = max(0, pi_rho)
             self.a_dot = np.sqrt(pi_rho) * self.a
 
             self.a += self.a_dot * dt
             self.H = self.a_dot / self.a
-            
-            
+
             if not self.a > 0:
                 self.destructor()
                 break
@@ -53,8 +55,8 @@ class Universe(Parameter, InitialValue):
                 self.destructor()
                 break
 
-
             self.phi.evolve(dt, self.a, self.a_dot)
+            self.G.evolve(dt, self.phi.get_Upsilon())
 
             self.recorder['t'].append(self.t)
             self.recorder['a'].append(self.a)
@@ -62,7 +64,7 @@ class Universe(Parameter, InitialValue):
             self.recorder['H'].append(self.H)
 
         self.destructor()
-        
+
     def destructor(self):
         for k, v in self.recorder.items():
             self.recorder[k] = np.array(v)
@@ -79,14 +81,13 @@ class Phi(Parameter, InitialValue):
         self.density_DR = self.ivalue['density_DR']
         self.alpha = self.parameter['g']**2 / (4 * np.pi)
         self.update_temperature()
-        self.recorder = {'t': [], 
+        self.recorder = {'t': [],
                          'field': [], 'field_dot': [], 'field_dot_dot': [],
-                         'density_vacuum': [], 'density_DR': [], 
+                         'density_vacuum': [], 'density_DR': [],
                          'T': [], 'Upsilon': []}
         self.t = self.ivalue['t']
 
         self.TF = False
-
 
     def update_temperature(self):
         self.T = (self.density_DR /
@@ -96,10 +97,11 @@ class Phi(Parameter, InitialValue):
         self.t += dt
 
         H = a_dot / a
-        self.density_DR_dot = -4 * H * self.density_DR + self.get_Upsilon() * self.field_dot**2
+        self.density_DR_dot = -4 * H * self.density_DR + \
+            self.get_Upsilon() * self.field_dot**2
         self.field_dot_dot = -3 * H * self.field_dot - \
             self.get_Upsilon() * self.field_dot + self.parameter['C']
-        
+
         if not self.TF:
             print(-3 * H * self.field_dot)
             print(-self.get_Upsilon() * self.field_dot)
@@ -120,7 +122,7 @@ class Phi(Parameter, InitialValue):
         self.recorder['T'].append(self.T)
         self.recorder['Upsilon'].append(self.get_Upsilon())
 
-    def get_Gamma_sph(self): # maybe need modification
+    def get_Gamma_sph(self):  # maybe need modification
         return self.parameter['Nc']**5 * self.alpha**5 * self.T**4
 
     def get_Upsilon(self):
@@ -146,6 +148,39 @@ class Phi(Parameter, InitialValue):
 
     def pressure(self):
         return (1/2) * self.field_dot**2 - self.potential()
+
+
+class GaugeField(Parameter, InitialValue):
+    def __init__(self, parameter, ivalue, initial_T) -> None:
+        Parameter.__init__(self, parameter)
+        InitialValue.__init__(self, ivalue)
+
+        self.recorder = {'t': [],
+                         'field': [], 'field_dot': [], 'field_dot_dot': [],
+                         'density': [],
+                         'T': []}
+        self.t = self.ivalue['t']
+        self.g_tilde = self.parameter['Nc']**2 - 1
+        self.t = 0
+
+    def update_Upsilon(self, Upsilon):
+        self.Upsilon = Upsilon
+        TrGtG = 16 * np.pi**2 * self.parameter['f'] * self.Upsilon
+        self.field = np.sqrt(3 * TrGtG) / self.g_tilde
+
+        self.density = (1/2) * (self.field**2 + self.field**2)
+        self.T = (self.density * (15 / self.g_tilde * np.pi**2))**(1/4)
+        self.number = 2 * self.g_tilde * zeta(3) * self.T**3 / np.pi**2
+        self.pressure = self.density / 3
+
+    def evolve(self, dt, Upsilon):
+        self.t += dt
+        self.update_Upsilon(Upsilon)
+
+        self.recorder['t'].append(self.t)
+        self.recorder['T'].append(self.T)
+        self.recorder['density'].append(self.density)
+        self.recorder['field'].append(self.field)
 
 
 if __name__ == '__main__':
