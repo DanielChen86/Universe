@@ -1,0 +1,7 @@
+phi_field: 1
+phi_field_dot: 2
+phi_temperature: 1.5
+a: 0.0001
+t: 0
+G_field: 1
+G_temperature: 3
