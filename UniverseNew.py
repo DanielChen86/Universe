@@ -44,6 +44,7 @@ class Universe(Parameter, InitialValue):
         self.recorder['Upsilon'] = []
         self.recorder['nR'] = []
         self.recorder['nR_dot'] = []
+        self.recorder['N_field'] = []
 
         self.temperature = self.ivalue['temperature']
         self.dark_radiation_temperature = self.ivalue['temperature']
@@ -51,6 +52,7 @@ class Universe(Parameter, InitialValue):
         self.phi_field = self.ivalue['phi_field']
         self.phi_field_dot = self.ivalue['phi_field_dot']
         self.nR = self.ivalue['nR']
+        self.N_field = self.ivalue['N_field']
         
         self.a = self.ivalue['a']
         self.a_dot = self.get_a_dot()
@@ -84,6 +86,10 @@ class Universe(Parameter, InitialValue):
         pi_rho = (8 * np.pi * self.parameter['G'] / 3) * total_density
         pi_rho = max(0, pi_rho)
         return np.sqrt(pi_rho) * self.a
+    
+    def get_G_field(self):
+        EB = np.pi**2 * self.get_Gamma_sph() * self.phi_field_dot / self.temperature / self.parameter['f']
+        return np.sqrt(EB)
 
     def run(self, dt=-1e-10, iteration: int = 10):
         for _ in range(iteration):
@@ -99,6 +105,9 @@ class Universe(Parameter, InitialValue):
                                      + self.parameter['C']
             self.nR_dot = self.TR * self.get_Gamma_sph() / self.temperature * (self.phi_field_dot / self.parameter['f'] - (24 * self.TR * self.nR) / (self.dR * self.temperature**2)) \
                           - self.kappa * (self.nR * self.parameter['Nc'] * self.alpha * self.mfermion**2) / self.temperature
+            
+            self.N_field_dot = self.g_tilde * self.get_G_field() * np.sqrt(self.nR)
+            self.N_field += self.N_field_dot * dt
 
             self.dark_radiation_density = self.get_dark_radiation_density()
 
@@ -130,6 +139,7 @@ class Universe(Parameter, InitialValue):
         self.recorder['Upsilon'].append(self.get_Upsilon())
         self.recorder['nR'].append(self.nR)
         self.recorder['nR_dot'].append(self.nR_dot)
+        self.recorder['N_field'].append(self.N_field)
 
 
 if __name__ == '__main__':
@@ -173,6 +183,11 @@ if __name__ == '__main__':
                       universe.recorder['nR'], s=3, label='nR')
     axs[3, 0].legend()
 
+    axs[3, 1].scatter(universe.recorder['t'],
+                      universe.recorder['N_field'], s=3, label='N_field')
+    axs[3, 1].legend()
+
 
     plt.tight_layout()
     plt.show()
+    plt.savefig('/Users/chenboting/Desktop/Universe.png')
