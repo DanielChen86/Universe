@@ -41,10 +41,12 @@ class Universe(Parameter, InitialValue):
         self.recorder['temperature'] = []
         self.recorder['phi_density'] = []
         self.recorder['dark_radiation_density'] = []
+        self.recorder['G_field'] = []
         self.recorder['Upsilon'] = []
         self.recorder['nR'] = []
         self.recorder['nR_dot'] = []
         self.recorder['N_field'] = []
+        self.recorder['total_density'] = []
 
         self.temperature = self.ivalue['temperature']
         self.dark_radiation_temperature = self.ivalue['temperature']
@@ -67,14 +69,13 @@ class Universe(Parameter, InitialValue):
         return (2 * self.parameter['Nc']**2 - 1) * (np.pi**2 / 30) * self.dark_radiation_temperature**4
 
     def get_phi_potential(self):
-        return - self.parameter['C'] * self.phi_field
+        return self.parameter['V0'] - self.parameter['C'] * self.phi_field
 
     def get_phi_density(self):
-        density = (1/2) * self.phi_field_dot**2
-        if density < 0:
-            print(f'phi_field_dot = {self.phi_field_dot}')
-            print(f'phi_potential = {self.get_phi_potential()}')
-            # return 0
+        density = (1/2) * self.phi_field_dot**2 + self.get_phi_potential()
+        # if density < 0:
+        #     print(f'phi_field_dot = {self.phi_field_dot}')
+        #     print(f'phi_potential = {self.get_phi_potential()}')
         return density
 
     def EOM_dark_radiation_temperature_dot(self):
@@ -82,9 +83,9 @@ class Universe(Parameter, InitialValue):
         return - self.H * self.dark_radiation_temperature + self.get_Upsilon() * self.phi_field_dot**2 / (4 * self.dark_radiation_temperature**3 * factor)
 
     def get_a_dot(self):
-        total_density = self.get_phi_density() + self.get_dark_radiation_density() + self.nR
-        pi_rho = (8 * np.pi * self.parameter['G'] / 3) * total_density
-        pi_rho = max(0, pi_rho)
+        self.total_density = self.get_phi_density() + self.get_dark_radiation_density() + self.nR
+        pi_rho = (8 * np.pi * self.parameter['G'] / 3) * self.total_density
+        # pi_rho = max(0, pi_rho)
         return np.sqrt(pi_rho) * self.a
     
     def get_G_field(self):
@@ -120,6 +121,11 @@ class Universe(Parameter, InitialValue):
             self.a += self.a_dot * dt
 
             self.record()
+
+            if self.total_density < 0:
+                break
+            if self.get_phi_density() < 0:
+                break
         for k, v in self.recorder.items():
             self.recorder[k] = np.array(v)
 
@@ -140,51 +146,56 @@ class Universe(Parameter, InitialValue):
         self.recorder['nR'].append(self.nR)
         self.recorder['nR_dot'].append(self.nR_dot)
         self.recorder['N_field'].append(self.N_field)
+        self.recorder['total_density'].append(self.total_density)
+        self.recorder['G_field'].append(self.get_G_field())
 
 
 if __name__ == '__main__':
+
     universe = Universe('Parameter.yaml', 'InitialValueNew.yaml')
-    universe.run(dt=1e-4, iteration=10000)
+    universe.run(dt=1e-5, iteration=20000)
     fig, axs = plt.subplots(4, 2, figsize=(15, 16))
 
     axs[0, 0].scatter(universe.recorder['t'],
-                      universe.recorder['a'], s=3, label='a')
+                        universe.recorder['a'], s=3, label='a')
     axs[0, 0].legend()
 
     axs[0, 1].scatter(universe.recorder['t'],
-                      universe.recorder['a_dot'], s=3, label='a_dot')
+                        universe.recorder['a_dot'], s=3, label='a_dot')
     axs[0, 1].legend()
 
     axs[1, 0].scatter(universe.recorder['t'],
-                      universe.recorder['temperature'], s=3, label='temperature')
+                        universe.recorder['temperature'], s=3, label='temperature')
     axs[1, 0].legend()
 
     axs[1, 1].scatter(universe.recorder['t'],
-                      universe.recorder['Upsilon'], s=3, label='Upsilon')
+                        universe.recorder['Upsilon'], s=3, label='Upsilon')
     axs[1, 1].scatter(universe.recorder['t'],
-                      universe.recorder['H'], s=3, label='H')
+                        universe.recorder['H'], s=3, label='H')
     axs[1, 1].legend()
 
     axs[2, 0].scatter(universe.recorder['t'],
-                      universe.recorder['phi_density'], s=3, label='phi_density')
-    # axs[2, 0].scatter(universe.recorder['t'], universe.recorder['dark_radiation_density'],
-    #                   s=3, label='dark_radiation_density')
+                        universe.recorder['phi_density'], s=3, label='phi_density')
+    axs[2, 0].scatter(universe.recorder['t'], universe.recorder['dark_radiation_density'],
+                    s=3, label='dark_radiation_density')
+    axs[2, 0].scatter(universe.recorder['t'], universe.recorder['total_density'],
+                    s=3, label='total_density')
     axs[2, 0].legend()
 
     axs[2, 1].scatter(universe.recorder['t'],
-                      universe.recorder['phi_field'], s=3, label='phi')
+                        universe.recorder['phi_field'], s=3, label='phi')
     axs[2, 1].scatter(universe.recorder['t'],
-                      universe.recorder['phi_field_dot'], s=3, label='phi_dot')
+                        universe.recorder['phi_field_dot'], s=3, label='phi_dot')
     axs[2, 1].scatter(universe.recorder['t'], universe.recorder['phi_field_dot_dot'] /
-                      universe.recorder['H'], s=3, label='phi_dot_dot')
+                        universe.recorder['H'], s=3, label='phi_dot_dot')
     axs[2, 1].legend()
 
     axs[3, 0].scatter(universe.recorder['t'],
-                      universe.recorder['nR'], s=3, label='nR')
+                        universe.recorder['nR'], s=3, label='nR')
     axs[3, 0].legend()
 
     axs[3, 1].scatter(universe.recorder['t'],
-                      universe.recorder['N_field'], s=3, label='N_field')
+                        universe.recorder['N_field'], s=3, label='N_field')
     axs[3, 1].legend()
 
 
