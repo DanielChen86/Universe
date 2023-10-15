@@ -16,12 +16,14 @@ class InitialValue:
         with open(ivalue, 'r') as f:
             self.ivalue = yaml.safe_load(f)
 
+
 class Constant:
     def __init__(self) -> None:
         self.h = 4.13566769 * 1e-15
         self.k = 8.617333262 * 1e-5
         self.c = 3 * 1e8
         self.eV = 1.6 * 1e-19
+
 
 class Universe(Parameter, InitialValue):
     def __init__(self, parameter, ivalue) -> None:
@@ -61,8 +63,6 @@ class Universe(Parameter, InitialValue):
         self.recorder['N_density'] = []
         self.recorder['total_density'] = []
 
-        
-        
         # self.temperature = 2.726
 
         self.t = self.ivalue['t0']
@@ -72,10 +72,9 @@ class Universe(Parameter, InitialValue):
         self.nR = self.ivalue['nR']
         self.N_field = self.ivalue['N_field']
 
-
     def a(self):
         return (self.Omega_m / self.Omega_Lambda)**(1/3) * (np.sinh((3/2) * np.sqrt(self.Omega_Lambda) * self.H0 * self.t))**(2/3)
-    
+
     def H(self):
         return np.sqrt(self.Omega_Lambda) * self.H0 * np.cosh((3/2) * np.sqrt(self.Omega_Lambda) * self.H0 * self.t) / np.sinh((3/2) * np.sqrt(self.Omega_Lambda) * self.H0 * self.t)
 
@@ -86,23 +85,27 @@ class Universe(Parameter, InitialValue):
         return self.get_Gamma_sph() / (2 * self.constant.k * self.temperature * self.parameter['f']**2)
 
     def get_dark_radiation_density(self):
-        return (2 * self.parameter['Nc']**2 - 1) * (5.67 * self.constant.eV) * self.temperature**4
+        return (2 * self.parameter['Nc']**2 - 1) * (5.67 * 1e-8 / self.constant.eV) * self.temperature**4
 
     def get_phi_potential(self):
         return self.parameter['V0'] - self.parameter['C'] * self.phi_field
 
     def get_phi_density(self):
-        density = (1/2) * self.phi_field_dot**2 + self.get_phi_potential()
+        density = (1/2) * (1 / self.constant.h / self.constant.c) * \
+            self.phi_field_dot**2 + self.get_phi_potential()
         return density
-    
+
     def EOM_dark_radiation_temperature_dot(self):
-        factor = (2 * self.parameter['Nc']**2 - 1) * (np.pi**2 / 30)
-        return - self.H() * self.constant.k * self.temperature + self.get_Upsilon() * self.phi_field_dot**2 / (4 * self.constant.k**3 * self.temperature**3 * factor)
-    
+        # factor = (2 * self.parameter['Nc']**2 - 1) * (np.pi**2 / 30)
+        sigma = (2 * np.pi**5 * self.constant.k**4) / \
+            (15 * self.constant.c**2 * self.constant.h**3)
+        return - self.H() * self.temperature + self.get_Upsilon() * self.phi_field_dot**2 / (4 * sigma * self.temperature**3)
+
     def get_G_field(self):
-        EB = np.pi**2 * self.get_Gamma_sph() * self.phi_field_dot / self.constant.k / self.temperature / self.parameter['f']
+        EB = np.pi**2 * self.get_Gamma_sph() * self.phi_field_dot / self.constant.k / \
+            self.temperature / self.parameter['f']
         return np.sqrt(EB)
-    
+
     def run(self, dt=-1e-10, iteration: int = 10):
         for _ in range(iteration):
             self.t += dt
@@ -111,36 +114,34 @@ class Universe(Parameter, InitialValue):
 
             self.phi_field_dot_dot = - 3 * self.H() * self.phi_field_dot \
                                      - self.get_Gamma_sph() / (2 * self.constant.k * self.temperature * self.parameter['f']**2) * self.phi_field_dot \
-                                     + (24 * self.get_Gamma_sph() * self.TR) / (2 * self.parameter['f'] * self.dR) / (self.constant.k**3 * self.temperature**3) * self.nR \
-                                     + self.parameter['C']
+                + (24 * self.get_Gamma_sph() * self.TR) / (2 * self.parameter['f'] * self.dR) / (self.constant.k**3 * self.temperature**3) * self.nR \
+                + self.parameter['C']
             self.nR_dot = self.TR * self.get_Gamma_sph() / self.constant.k / self.temperature * (self.phi_field_dot / self.parameter['f'] - (24 * self.TR * self.nR) / (self.dR * self.temperature**2)) \
-                          - self.kappa * (self.nR * self.parameter['Nc'] * self.alpha * self.mfermion**2) / self.temperature /self.constant.k
-            
+                - self.kappa * \
+                (self.nR * self.parameter['Nc'] * self.alpha *
+                 self.mfermion**2) / self.temperature / self.constant.k
+
             self.nR += self.nR_dot * dt
 
             self.G_field = self.get_G_field()
 
-            self.N_field_dot = - 3 * self.H() * self.N_field + (1/self.parameter['fN']) * self.g_tilde * self.G_field * np.sqrt(self.nR)
-            
+            self.N_field_dot = - 3 * self.H() * self.N_field + \
+                (1/self.parameter['fN']) * self.g_tilde * \
+                self.G_field * np.sqrt(self.nR)
+
             self.N_field += self.N_field_dot * dt
 
-            
             self.N_density = self.N_field**2
-            
 
             self.dark_radiation_density = self.get_dark_radiation_density()
 
             self.phi_field_dot += self.phi_field_dot_dot * dt
             self.phi_field += self.phi_field_dot * dt
 
-            self.total_density = self.get_phi_density() + self.get_dark_radiation_density() + self.nR + self.N_density
-
-
-            
+            self.total_density = self.get_phi_density() + self.get_dark_radiation_density() + \
+                self.nR + self.N_density
 
             self.record()
-
-
 
             if self.a() > 1:
                 print('a > 1')
@@ -178,7 +179,7 @@ if __name__ == '__main__':
     fig, axs = plt.subplots(4, 2, figsize=(15, 16))
 
     axs[0, 0].scatter(universe.recorder['t'],
-                        universe.recorder['a'], s=3, label='a')
+                      universe.recorder['a'], s=3, label='a')
     axs[0, 0].legend()
 
     # axs[0, 1].scatter(universe.recorder['t'],
@@ -186,40 +187,38 @@ if __name__ == '__main__':
     # axs[0, 1].legend()
 
     axs[1, 0].scatter(universe.recorder['t'],
-                        universe.recorder['temperature'], s=3, label='temperature')
+                      universe.recorder['temperature'], s=3, label='temperature')
     axs[1, 0].legend()
 
     axs[1, 1].scatter(universe.recorder['t'],
-                        universe.recorder['Upsilon'], s=3, label='Upsilon')
+                      universe.recorder['Upsilon'], s=3, label='Upsilon')
     axs[1, 1].scatter(universe.recorder['t'],
-                        universe.recorder['H'], s=3, label='H')
+                      universe.recorder['H'], s=3, label='H')
     axs[1, 1].legend()
 
     axs[2, 0].scatter(universe.recorder['t'],
-                        universe.recorder['phi_density'], s=3, label='phi_density')
+                      universe.recorder['phi_density'], s=3, label='phi_density')
     axs[2, 0].scatter(universe.recorder['t'], universe.recorder['dark_radiation_density'],
-                    s=3, label='dark_radiation_density')
+                      s=3, label='dark_radiation_density')
     # axs[2, 0].scatter(universe.recorder['t'], universe.recorder['total_density'],
     #                 s=3, label='total_density')
     axs[2, 0].legend()
 
     axs[2, 1].scatter(universe.recorder['t'],
-                        universe.recorder['phi_field'], s=3, label='phi')
+                      universe.recorder['phi_field'], s=3, label='phi')
     axs[2, 1].scatter(universe.recorder['t'],
-                        universe.recorder['phi_field_dot'], s=3, label='phi_dot')
+                      universe.recorder['phi_field_dot'], s=3, label='phi_dot')
     axs[2, 1].scatter(universe.recorder['t'], universe.recorder['phi_field_dot_dot'] /
-                        universe.recorder['H'], s=3, label='phi_dot_dot')
+                      universe.recorder['H'], s=3, label='phi_dot_dot')
     axs[2, 1].legend()
 
     axs[3, 0].scatter(universe.recorder['t'],
-                        universe.recorder['nR'], s=3, label='nR')
+                      universe.recorder['nR'], s=3, label='nR')
     axs[3, 0].legend()
 
     axs[3, 1].scatter(universe.recorder['t'],
-                        universe.recorder['N_field'], s=3, label='N_field')
+                      universe.recorder['N_field'], s=3, label='N_field')
     axs[3, 1].legend()
     print(universe.recorder['N_field'])
 
     plt.show()
-
-

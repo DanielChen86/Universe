@@ -1,7 +1,6 @@
 phi_field: 0.001
 phi_field_dot: 0.0001
-temperature: 20000
-# a: 1
+temperature: 481.452730897735
 t0: 0.000001
 nR: 0
 N_field: 0
